@@ -67,7 +67,7 @@ class Z6528:
         self.fig = plt.figure()
         self.ax1 = self.fig.add_subplot(1,1,1)
 
-    def animate(self, i):
+    def animate(self):
         graph_data = open('log.csv', 'r').read()
         lines = graph_data.split('\n')
         xs = []
@@ -84,11 +84,14 @@ class Z6528:
 thermometer = DS18B20()
 thermometer.find_sensors()
 display = Z6528()
-ani = animation.FuncAnimation(display.fig, display.animate, interval=1000)
-plt.show()
 
 while True:
+    plt.ion()
+    plt.show()
     thermometer.read_temp()
     thermometer.print_temps()
     thermometer.log_csv()
     thermometer.clear_rows()
+    display.animate()
+    plt.draw()
+    plt.pause(0.001)
