@@ -56,9 +56,6 @@ class DS18B20:
         with open('logs.csv','a+') as log:
             writer = csv.writer(log)
             writer.writerows(self.rows)
-        with open('log.csv', 'a+') as log:
-            writer = csv.writer(log)
-            writer.writerows(self.temps)
 
     def clear_rows(self):
         self.rows.clear()
