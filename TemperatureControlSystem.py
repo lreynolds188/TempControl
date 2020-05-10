@@ -65,11 +65,6 @@ class DS18B20:
         self.temps.clear()
 
 class Z6528:
-    def __init__(self):
-        style.use('fivethirtyeight')
-        self.fig = plt.figure()
-        self.ax1 = self.fig.add_subplot(1,1,1)
-
     def live_plotter(self,x_vec,y1_data,line1,identifier='',pause_time=0.1):
         if line1==[]:
             # this is the call to matplotlib that allows dynamic plotting
