@@ -1,10 +1,12 @@
+#!/usr/bin/python3
+
 import os
 import glob
 import time
 import datetime
 import csv
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+import numpy as np
 from matplotlib import style
 
 #these tow lines mount the device:
@@ -43,6 +45,7 @@ class DS18B20:
                 time.sleep(2)
             else:
                 time.sleep(0.2)
+        return self.strip_string(temp)
     
     def print_temps(self):
         print('-'*90)
@@ -67,31 +70,44 @@ class Z6528:
         self.fig = plt.figure()
         self.ax1 = self.fig.add_subplot(1,1,1)
 
-    def animate(self):
-        graph_data = open('log.csv', 'r').read()
-        lines = graph_data.split('\n')
-        xs = []
-        ys = []
-        for line in lines:
-            if len(line) > 1:
-                x, y = line.split(',')
-                xs.append(x)
-                ys.append(y)
-        self.ax1.clear()
-        self.ax1.plot(xs, ys)
+    def live_plotter(self,x_vec,y1_data,line1,identifier='',pause_time=0.1):
+        if line1==[]:
+            # this is the call to matplotlib that allows dynamic plotting
+            plt.ion()
+            fig = plt.figure(figsize=(13,6))
+            ax = fig.add_subplot(111)
+            # create a variable for the line so we can later update it
+            line1, = ax.plot(x_vec,y1_data,'-o',alpha=0.8)        
+            #update plot label/title
+            plt.ylabel('Y Label')
+            plt.title('Title: {}'.format(identifier))
+            plt.show()
+        
+        # after the figure, axis, and line are created, we only need to update the y-data
+        line1.set_ydata(y1_data)
+        # adjust limits if new data goes beyond bounds
+        if np.min(y1_data)<=line1.axes.get_ylim()[0] or np.max(y1_data)>=line1.axes.get_ylim()[1]:
+            plt.ylim([np.min(y1_data)-np.std(y1_data),np.max(y1_data)+np.std(y1_data)])
+        # this pauses the data so the figure/axis can catch up - the amount of pause can be altered above
+        plt.pause(pause_time)
+        
+        # return line so we can update it again in the next iteration
+        return line1
 
 
 thermometer = DS18B20()
 thermometer.find_sensors()
 display = Z6528()
+plt.style.use('ggplot')
+size = 100
+x_vec = np.linspace(0,1,size+1)[0:-1]
+y_vec = np.random.randn(len(x_vec))
+line1 = []
 
 while True:
-    plt.ion()
-    plt.show()
-    thermometer.read_temp()
+    y_vec[-1] = thermometer.read_temp()
     thermometer.print_temps()
     thermometer.log_csv()
     thermometer.clear_rows()
-    display.animate()
-    plt.draw()
-    plt.pause(0.001)
+    line1 = display.live_plotter(x_vec, y_vec, line1)
+    y_vec = np.append(y_vec[1:],0.0)
