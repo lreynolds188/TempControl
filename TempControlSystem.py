@@ -152,15 +152,10 @@ class Z6528:
         self.y_vec = np.random.randn(len(self.x_vec))
         self.line = []
 
-    def updateText(self, temp, pos):
-        self.temp_text.set_text('temp = %.1f' % temp)
-        self.valve_text.set_text('valve = %.1f' % pos)
-
     def update(self, temp):
         self.y_vec[-1] = temp
         self.line = self.live_plotter(self.x_vec, self.y_vec, self.line)
         self.y_vec = np.append(self.y_vec[1:],0.0)
-        anim = animation.FuncAnimation(self.fig, self.updateText, 10, blit=True, init_func=init)
 
     def live_plotter(self,x1_data,y1_data,line,identifier='',pause_time=0.1):
         if line==[]:
