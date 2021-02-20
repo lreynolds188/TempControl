@@ -187,25 +187,25 @@ class Controller:
             while not valve.valve_closed():
                 valve.close_valve()
             valve.stop_valve()
-        # open valve 1/8
+        # open valve 1/4
         elif temp <= 75:
-            while valve.position < 20:
+            while valve.position < 25:
                 valve.open_valve()
-            while valve.position > 21:
+            while valve.position > 26:
                 valve.close_valve()
             valve.stop_valve()
-        # open valve 1/4    
+        # open valve 1/2    
         elif temp <= 80:
-            while valve.position < 35:
-                valve.open_valve()
-            while valve.position > 36:
-                valve.close_valve()
-            valve.stop_valve()
-        # open valve 1/2
-        elif temp <= 85:
             while valve.position < 50:
                 valve.open_valve()
             while valve.position > 51:
+                valve.close_valve()
+            valve.stop_valve()
+        # open valve 3/4
+        elif temp <= 85:
+            while valve.position < 75:
+                valve.open_valve()
+            while valve.position > 76:
                 valve.close_valve()
             valve.stop_valve()
         # open valve fully, sound alarm, turn off heat   
