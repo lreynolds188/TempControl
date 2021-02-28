@@ -224,11 +224,11 @@ class Logger:
         self.log_csv()
 
     def print_status(self, valve):
-        print(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]}°C    Valve Pos: {valve.position}% ')
+        print(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]:.2f}°C    Valve Pos: {valve.position}% ')
 
     def log_csv(self):
         log = open('log.csv','a+')
-        log.write(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]}°C    Valve Pos: {valve.position}% \n')
+        log.write(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]:.2f}°C    Valve Pos: {valve.position}% \n')
 
 
 try:
