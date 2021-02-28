@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+
 """
 Temperature control system designed for a chemical reactor
 
@@ -10,35 +11,46 @@ license: GPL
 
 import os
 import glob
-import datetime
 import time
+import datetime
 import csv
+import RPi.GPIO as GPIO
+import tkinter as tk
+import matplotlib
+import matplotlib.animation as animation
 import matplotlib.dates as dts
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import numpy as np
-import RPi.GPIO as GPIO
+from tkinter import *
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib import style
+matplotlib.use("TkAgg")
+style.use('ggplot')
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-from matplotlib import style
-
-#these tow lines mount the device:
 os.system('modprobe w1-gpio')
 os.system('modprobe w1-therm')
+
+fig = plt.figure(figsize=(8,3), dpi=100)
+ax = fig.add_subplot(111)
+
+temps = []
+counts = []
+stamps = []
+        
+def animate(i):
+    ax.clear()
+    ax.plot(counts, temps)
+    plt.xlabel('Time Elapsed (Seconds)', size=10)
+    plt.ylabel('Temp (°C)', size=10)
+    
 
 class DS18B20:
     def __init__(self):
         self.base_dir = r'/sys/bus/w1/devices/28*'
         self.sensor_path = []        
         self.sensor_name = []
-        self.temps = []
-        self.rows = []
-
-    def update(self):
-        thermometer.print_temps()
-        thermometer.log_csv()
-        thermometer.clear_rows()
-
+        self.count = 0
+        
     def setup(self):
         self.sensor_path = glob.glob(self.base_dir)
         self.sensor_name = [path.split('/')[-1] for path in self.sensor_path]
@@ -51,34 +63,26 @@ class DS18B20:
         return temp_c
 
     def read_temp(self):
-        tstamp = datetime.datetime.now()
+        global counts
+        global temps
+        global stamps
+        tstamp = datetime.datetime.now().strftime('%H:%M:%S')
         for sensor, path in zip(self.sensor_name, self.sensor_path):
-            # open sensor file and read data
             with open(path + '/w1_slave','r') as f:
                 valid, temp = f.readlines()
-            # check validity of data
             if 'YES' in valid:
-                self.rows.append((tstamp, sensor, self.strip_string(temp)))
-                time.sleep(1)
-            else:
-                time.sleep(0.2)
-        return (tstamp.strftime('%H:%M:%S'), self.strip_string(temp))
-    
-    def print_temps(self):
-        print('-'*90)
-        for t, n, c in self.rows:
-            print(f'Sensor: {n}  C={c:,.3f}  DateTime: {t}')
-       
-    def log_csv(self):
-        with open('logs.csv','a+') as log:
-            writer = csv.writer(log)
-            writer.writerows(self.rows)
+                temp = round(self.strip_string(temp), 2)
+                counts.append(self.count) 
+                stamps.append(tstamp)
+                temps.append(temp)
+                if len(temps) >= 300:
+                    stamps.pop(0)
+                    counts.pop(0)
+                    temps.pop(0)
+                self.count += 1
+        return (tstamp, temp)
 
-    def clear_rows(self):
-        self.rows.clear()
-        self.temps.clear()
-
-        
+ 
 class CR05:
     def __init__(self):
         self.openPowerRelayPin = 6
@@ -141,95 +145,118 @@ class CR05:
         GPIO.output(self.closeGroundRelayPin, GPIO.LOW)
 
 
-class Z6528:
+class GUI(Tk):
     def __init__(self):
-        plt.style.use('ggplot')
-        plt.ion()
-        self.fig = plt.figure(figsize=(13,6))
-        self.ax = self.fig.add_subplot(111)
-        self.size = 100
-        self.x_vec = np.linspace(0,1,self.size+1)[0:-1]
-        self.y_vec = np.random.randn(len(self.x_vec))
-        self.line = []
+        super().__init__()
+        self.title("Temperature Controller")
+        self.geometry('800x460+0+-5') 
 
-    def update(self, temp):
-        self.y_vec[-1] = temp
-        self.line = self.live_plotter(self.x_vec, self.y_vec, self.line)
-        self.y_vec = np.append(self.y_vec[1:],0.0)
-
-    def live_plotter(self,x1_data,y1_data,line,identifier='',pause_time=0.1):
-        if line==[]:
-            # create a variable for the line so we can later update it
-            line, = self.ax.plot(x1_data,y1_data,alpha=0.8,color='red')  
-
-            #update plot label/title
-            plt.ylabel('Temp (°C)')
-            plt.title('Temp Control System {}'.format(identifier))
-            plt.show()
+        self.canvas = FigureCanvasTkAgg(fig, self)
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
-        # after the figure, axis, and line are created, we only need to update the y-data
-        line.set_ydata(y1_data)
+        self.btn_pump_in = tk.Button(self, height=3, width=10, text="Pump In", bg='orange', activebackground='#FFC87C', command=lambda: controller.show_frame(GUI))
+        self.btn_pump_in.pack(side=tk.LEFT)
 
-        # adjust limits if new data goes beyond bounds
-        if np.min(y1_data)<=line.axes.get_ylim()[0] or np.max(y1_data)>=line.axes.get_ylim()[1]:
-            plt.ylim([np.min(y1_data)-np.std(y1_data),np.max(y1_data)+np.std(y1_data)])
+        self.btn_start = tk.Button(self, height=3, width=10, text="Start", bg='green', activebackground='#90EE90', command=lambda: controller.show_frame(GUI))
+        self.btn_start.pack(side=tk.LEFT)
+
+        self.btn_pump_out = tk.Button(self, height=3, width=10, text="Pump Out", bg='yellow', activebackground='#FFFF80', command=lambda: controller.show_frame(GUI))
+        self.btn_pump_out.pack(side=tk.RIGHT)
+ 
+        self.btn_stop = tk.Button(self, height=3, width=10, text="Stop", bg='red', activebackground='#FF6347', command=lambda: controller.show_frame(GUI))
+        self.btn_stop.pack(side=tk.RIGHT) 
+
+        self.lbl_temp = tk.Label(self, text = "0°C") 
+        self.lbl_temp.config(font=("Arial", 40))
+        self.lbl_temp.pack(side=tk.BOTTOM)
+
+    def updateText(self, temp):
         
-        # this pauses the data so the figure/axis can catch up - the amount of pause can be altered above
-        plt.pause(pause_time)
-
-        # return line so we can update it again in the next iteration
-        return line
+        if temp < 65:
+            self.lbl_temp.config(text=str(temp)+'°C', fg="blue")
+        elif temp < 78:
+            self.lbl_temp.config(text=str(temp)+'°C', fg="yellow")
+        elif temp < 82:
+            self.lbl_temp.config(text=str(temp)+'°C', fg="green")
+        elif temp < 86:
+            self.lbl_temp.config(text=str(temp)+'°C', fg="orange")
+        else:
+            self.lbl_temp.config(text=str(temp)+'°C', fg="red")
 
 class Controller:
-    def update(self, temp, valve):
-        # close valve
-        if temp <= 70:
+    def update(self, temp, valve, gui):
+        if temp < 70:
             while not valve.valve_closed():
                 valve.close_valve()
             valve.stop_valve()
-        # open valve 1/4
-        elif temp <= 75:
+        elif temp < 75:
             while valve.position < 25:
                 valve.open_valve()
             while valve.position > 26:
                 valve.close_valve()
-            valve.stop_valve()
-        # open valve 1/2    
-        elif temp <= 80:
+            valve.stop_valve() 
+        elif temp < 80:
             while valve.position < 50:
                 valve.open_valve()
             while valve.position > 51:
                 valve.close_valve()
             valve.stop_valve()
-        # open valve 3/4
-        elif temp <= 85:
+        elif temp < 85:
             while valve.position < 75:
                 valve.open_valve()
             while valve.position > 76:
                 valve.close_valve()
-            valve.stop_valve()
-        # open valve fully, sound alarm, turn off heat   
-        elif temp > 85:
+            valve.stop_valve() 
+        else:
             while not valve.valve_opened():
                 valve.open_valve()
             valve.stop_valve()
-    
+
+
+class Logger:
+    def __init__(self):
+        tstamp = datetime.datetime.now().strftime('%c')
+        log = open('log.csv','a+')
+        log.write(f'\n\n{tstamp}\n')
+
+    def update(self, valve):
+        self.print_status(valve)
+        self.log_csv()
+
+    def print_status(self, valve):
+        print(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]}°C    Valve Pos: {valve.position}% ')
+
+    def log_csv(self):
+        log = open('log.csv','a+')
+        log.write(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]}°C    Valve Pos: {valve.position}% \n')
+
+
 try:
-    thermometer = DS18B20()
-    thermometer.setup()
+    therm = DS18B20()
+    therm.setup()
     valve = CR05()
     valve.setup()
-    display = Z6528()
     controller = Controller()
-
+    logger = Logger()
+    gui = GUI()
+    ani = animation.FuncAnimation(fig, animate, interval=10000)
+    temp = 0
+    startTime = time.time()
+    endTime =  time.time()
     while True:
-        temp = thermometer.read_temp()[1]
-        thermometer.update()
-        controller.update(temp, valve)
-        display.update(temp)
+        gui.update_idletasks()
+        gui.update() 
+        endTime = time.time()
+        if (endTime - startTime >= 1):
+            startTime = time.time()
+            temp = therm.read_temp()[1]
+            gui.updateText(temp)
+            logger.update(valve)
+        controller.update(temp, valve, gui)
+        
 
 except KeyboardInterrupt:
     print("\n")
 
 finally:
-    GPIO.cleanup()
+    GPIO.cleanup()     
