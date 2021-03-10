@@ -184,7 +184,7 @@ class GUI(Tk):
             self.lbl_temp.config(text=str(temp)+'°C', fg="red")
 
 class Controller:
-    def update(self, temp, valve, gui):
+    def update(self, temp, valve):
         if temp < 70:
             while not valve.valve_closed():
                 valve.close_valve()
@@ -239,7 +239,7 @@ try:
     controller = Controller()
     logger = Logger()
     gui = GUI()
-    ani = animation.FuncAnimation(fig, animate, interval=10000)
+    ani = animation.FuncAnimation(fig, animate, interval=5000)
     temp = 0
     startTime = time.time()
     endTime =  time.time()
@@ -252,11 +252,11 @@ try:
             temp = therm.read_temp()[1]
             gui.updateText(temp)
             logger.update(valve)
-        controller.update(temp, valve, gui)
+        controller.update(temp, valve)
         
 
 except KeyboardInterrupt:
-    print("\n")
+    print("An error has occurred\n")
 
 finally:
     GPIO.cleanup()     
