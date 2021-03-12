@@ -10,78 +10,82 @@ license: GPL
 """
 
 import os
-import glob
+import csv
 import time
 import datetime
-import csv
+import subprocess
 import RPi.GPIO as GPIO
 import tkinter as tk
 import matplotlib
 import matplotlib.animation as animation
 import matplotlib.dates as dts
 import matplotlib.pyplot as plt
-from tkinter import *
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib import style
-matplotlib.use("TkAgg")
-style.use('ggplot')
+from tkinter import *
+from w1thermsensor import W1ThermSensor
+
+# GPIO Setup
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-os.system('modprobe w1-gpio')
-os.system('modprobe w1-therm')
 
-fig = plt.figure(figsize=(8,3), dpi=100)
-ax = fig.add_subplot(111)
+def pump_on():
+    subprocess.call("Outlet1On.sh")
+    print("Outlet 1: ON")
 
-temps = []
-counts = []
-stamps = []
-        
+def pump_off():
+    subprocess.call("Outlet1Off.sh")
+    print("Outlet 1: OFF")
+
+def heater_on():
+    subprocess.call("Outlet2On.sh")
+    print("Outlet 2: ON")
+
+def heater_off():
+    subprocess.call("Outlet2Off.sh")
+    print("Outlet 2: OFF")
+
+def compressor_ac_on():
+    subprocess.call("Outlet3On.sh")
+    print("Outlet 3: ON")
+
+def compressor_ac_off():
+    subprocess.call("Outlet3Off.sh")
+    print("Outlet 3: OFF")
+
+def start():
+    running = 1
+    pump_on()
+    heater_on()
+    compressor_ac_on()
+    
+def stop():
+    running = 0
+    heater_off()
+    compressor_ac_off()    
+    
+def pump():
+    pump_on()
+    heater_off()
+    compressor_ac_off()
+
+def updateText():
+    if temp < 65:
+        lbl_temp.config(text=str(temp)+'°C', fg="blue")
+    elif temp < 78:
+        lbl_temp.config(text=str(temp)+'°C', fg="yellow")
+    elif temp < 82:
+        lbl_temp.config(text=str(temp)+'°C', fg="green")
+    elif temp < 86:
+        lbl_temp.config(text=str(temp)+'°C', fg="orange")
+    else:
+        lbl_temp.config(text=str(temp)+'°C', fg="red")
+
 def animate(i):
     ax.clear()
     ax.plot(counts, temps)
     plt.xlabel('Time Elapsed (Seconds)', size=10)
     plt.ylabel('Temp (°C)', size=10)
-    
-
-class DS18B20:
-    def __init__(self):
-        self.base_dir = r'/sys/bus/w1/devices/28*'
-        self.sensor_path = []        
-        self.sensor_name = []
-        self.count = 0
-        
-    def setup(self):
-        self.sensor_path = glob.glob(self.base_dir)
-        self.sensor_name = [path.split('/')[-1] for path in self.sensor_path]
-
-    def strip_string(self, temp_str):
-        i = temp_str.index('t=')
-        if i != -1:
-            t = temp_str[i+2:]
-            temp_c = float(t)/1000.0
-        return temp_c
-
-    def read_temp(self):
-        global counts
-        global temps
-        global stamps
-        tstamp = datetime.datetime.now().strftime('%H:%M:%S')
-        for sensor, path in zip(self.sensor_name, self.sensor_path):
-            with open(path + '/w1_slave','r') as f:
-                valid, temp = f.readlines()
-            if 'YES' in valid:
-                temp = round(self.strip_string(temp), 2)
-                counts.append(self.count) 
-                stamps.append(tstamp)
-                temps.append(temp)
-                if len(temps) >= 300:
-                    stamps.pop(0)
-                    counts.pop(0)
-                    temps.pop(0)
-                self.count += 1
-        return (tstamp, temp)
-
  
 class CR05:
     def __init__(self):
@@ -92,9 +96,9 @@ class CR05:
         self.closeGroundRelayPin = 12
         self.closedSignalPin = 16
         self.sleeptime = 0.0304
-        self.position = 0
 
     def setup(self):
+        global valve_position
         GPIO.setup(self.closePowerRelayPin, GPIO.OUT)
         GPIO.output(self.closePowerRelayPin, GPIO.LOW)
         GPIO.setup(self.openPowerRelayPin, GPIO.OUT)
@@ -108,7 +112,7 @@ class CR05:
         while not self.valve_closed():
             self.close_valve()
         self.stop_valve()    
-        self.position = 0
+        valve_position = 0
 
     def valve_opened(self):
         return not GPIO.input(self.openedSignalPin)
@@ -117,23 +121,25 @@ class CR05:
         return not GPIO.input(self.closedSignalPin)
 
     def open_valve(self):
+        global valve_position
         if not self.valve_opened():
             GPIO.output(self.closePowerRelayPin, GPIO.LOW)
             GPIO.output(self.closeGroundRelayPin, GPIO.LOW)
             GPIO.output(self.openPowerRelayPin, GPIO.HIGH)
             GPIO.output(self.openGroundRelayPin, GPIO.HIGH)
-            self.position += 1
+            valve_position += 1
             time.sleep(self.sleeptime)
         else:
             self.stop_valve()
 
     def close_valve(self):
+        global valve_position
         if not self.valve_closed():
             GPIO.output(self.openPowerRelayPin, GPIO.LOW)
             GPIO.output(self.openGroundRelayPin, GPIO.LOW)
             GPIO.output(self.closePowerRelayPin, GPIO.HIGH)
             GPIO.output(self.closeGroundRelayPin, GPIO.HIGH)
-            self.position -= 1
+            valve_position -= 1
             time.sleep(self.sleeptime)
         else:
             self.stop_valve()
@@ -144,47 +150,12 @@ class CR05:
         GPIO.output(self.closePowerRelayPin, GPIO.LOW)
         GPIO.output(self.closeGroundRelayPin, GPIO.LOW)
 
-
-class GUI(Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Temperature Controller")
-        self.geometry('800x460+0+-5') 
-
-        self.canvas = FigureCanvasTkAgg(fig, self)
-        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        
-        self.btn_pump_in = tk.Button(self, height=3, width=10, text="Pump In", bg='orange', activebackground='#FFC87C', command=lambda: controller.show_frame(GUI))
-        self.btn_pump_in.pack(side=tk.LEFT)
-
-        self.btn_start = tk.Button(self, height=3, width=10, text="Start", bg='green', activebackground='#90EE90', command=lambda: controller.show_frame(GUI))
-        self.btn_start.pack(side=tk.LEFT)
-
-        self.btn_pump_out = tk.Button(self, height=3, width=10, text="Pump Out", bg='yellow', activebackground='#FFFF80', command=lambda: controller.show_frame(GUI))
-        self.btn_pump_out.pack(side=tk.RIGHT)
- 
-        self.btn_stop = tk.Button(self, height=3, width=10, text="Stop", bg='red', activebackground='#FF6347', command=lambda: controller.show_frame(GUI))
-        self.btn_stop.pack(side=tk.RIGHT) 
-
-        self.lbl_temp = tk.Label(self, text = "0°C") 
-        self.lbl_temp.config(font=("Arial", 40))
-        self.lbl_temp.pack(side=tk.BOTTOM)
-
-    def updateText(self, temp):
-        
-        if temp < 65:
-            self.lbl_temp.config(text=str(temp)+'°C', fg="blue")
-        elif temp < 78:
-            self.lbl_temp.config(text=str(temp)+'°C', fg="yellow")
-        elif temp < 82:
-            self.lbl_temp.config(text=str(temp)+'°C', fg="green")
-        elif temp < 86:
-            self.lbl_temp.config(text=str(temp)+'°C', fg="orange")
-        else:
-            self.lbl_temp.config(text=str(temp)+'°C', fg="red")
-
 class Controller:
-    def update(self, temp, valve):
+    def update(self):
+        global running, temp, valve
+        if temp < 65 and running == 0:
+            pump_off()
+            running = -1
         if temp < 70:
             while not valve.valve_closed():
                 valve.close_valve()
@@ -212,7 +183,6 @@ class Controller:
                 valve.open_valve()
             valve.stop_valve()
 
-
 class Logger:
     def __init__(self):
         tstamp = datetime.datetime.now().strftime('%c')
@@ -220,43 +190,86 @@ class Logger:
         log.write(f'\n\n{tstamp}\n')
 
     def update(self, valve):
-        self.print_status(valve)
+        self.print_status()
         self.log_csv()
 
-    def print_status(self, valve):
-        print(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]:.2f}°C    Valve Pos: {valve.position}% ')
+    def print_status(self):
+        print(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]:.2f}°C    Valve Pos: {valve_position}% ')
 
     def log_csv(self):
         log = open('log.csv','a+')
-        log.write(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]:.2f}°C    Valve Pos: {valve.position}% \n')
-
+        log.write(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]:.2f}°C    Valve Pos: {valve_position}% \n')
 
 try:
-    therm = DS18B20()
-    therm.setup()
+    # Global variables
+    temp = 0 # I refuse to explain this variable's use
+    valve_position = 0 # The position of the valve 0: Closed - 100: Open
+    count = 0 # Counts the number of temperatures stored
+    running = -1 # -1: Not started, 0: Off, 1: On
+    temps = [] # Stores temperature's to display on screen
+    counts = [] # Stores temperature's ID for logging
+    stamps = [] # Stores temperature's timestamp for logging
+
+    # Matplotlib init
+    matplotlib.use("TkAgg")
+    style.use('ggplot')
+    fig = plt.figure(figsize=(8,3), dpi=100)
+    ax = fig.add_subplot(111)
+
+    # Sensors Init
+    therm = W1ThermSensor()
     valve = CR05()
     valve.setup()
+
+    # Controller Init
     controller = Controller()
     logger = Logger()
-    gui = GUI()
-    ani = animation.FuncAnimation(fig, animate, interval=5000)
-    temp = 0
+
+    # GUI Init
+    gui = tk.Tk(className='Temperature Controller', )
+    gui.geometry("800x460+0+-5")
+
+    # GUI Contents
+    canvas = FigureCanvasTkAgg(fig, gui)
+    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    btn_pump_in = tk.Button(gui, height=3, width=10, text="Pump In", bg='orange', activebackground='#FFC87C', command=pump)
+    btn_pump_in.pack(side=tk.LEFT)
+    btn_start = tk.Button(gui, height=3, width=10, text="Start", bg='green', activebackground='#90EE90', command=start)
+    btn_start.pack(side=tk.LEFT)
+    btn_pump_out = tk.Button(gui, height=3, width=10, text="Pump Out", bg='yellow', activebackground='#FFFF80', command=pump)
+    btn_pump_out.pack(side=tk.RIGHT)
+    btn_stop = tk.Button(gui, height=3, width=10, text="Stop", bg='red', activebackground='#FF6347', command=stop)
+    btn_stop.pack(side=tk.RIGHT) 
+    lbl_temp = tk.Label(gui, text = "0°C") 
+    lbl_temp.config(font=("Arial", 40))
+    lbl_temp.pack(side=tk.BOTTOM)        
+
+    # Animate the Matplotlib graph
+    ani = animation.FuncAnimation(fig, animate, interval=2500)
     startTime = time.time()
-    endTime =  time.time()
+
+    # Main loop
     while True:
         gui.update_idletasks()
-        gui.update() 
+        gui.update()
         endTime = time.time()
         if (endTime - startTime >= 1):
             startTime = time.time()
-            temp = therm.read_temp()[1]
-            gui.updateText(temp)
+            temp = therm.get_temperature()
+            counts.append(count) 
+            stamps.append(datetime.datetime.now().strftime('%H:%M:%S'))
+            temps.append(temp)
+            if len(temps) >= 300:
+                    stamps.pop(0)
+                    counts.pop(0)
+                    temps.pop(0)
+            count += 1
+            updateText()
             logger.update(valve)
-        controller.update(temp, valve)
-        
+        controller.update()
 
 except KeyboardInterrupt:
     print("An error has occurred\n")
 
 finally:
-    GPIO.cleanup()     
+    GPIO.cleanup()
