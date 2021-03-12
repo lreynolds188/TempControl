@@ -1,0 +1,6 @@
+		ON		OFF
+Outlet 1	15233484	15233476	
+Outlet 2	15233482	15233474
+Outlet 3	15233481	15233473
+
+https://www.princetronics.com/how-to-read-433-mhz-codes-w-raspberry-pi-433-mhz-receiver/
