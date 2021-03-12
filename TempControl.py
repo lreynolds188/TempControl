@@ -31,43 +31,49 @@ GPIO.setwarnings(False)
 
 def pump_on():
     subprocess.call("Outlet1On.sh")
-    print("Outlet 1: ON")
+    print("Outlet 1 (Pump): ON")
+    logger.log_csv_input("Outlet 1 (Pump): ON")
 
 def pump_off():
     subprocess.call("Outlet1Off.sh")
-    print("Outlet 1: OFF")
+    print("Outlet 1 (Pump): OFF")
+    logger.log_csv_input("Outlet 1 (Pump): OFF")
 
 def heater_on():
     subprocess.call("Outlet2On.sh")
-    print("Outlet 2: ON")
+    print("Outlet 2 (Heater): ON")
+    logger.log_csv_input("Outlet 2 (Heater): ON")
 
 def heater_off():
     subprocess.call("Outlet2Off.sh")
-    print("Outlet 2: OFF")
+    print("Outlet 2 (Heater): OFF")
+    logger.log_csv_input("Outlet 2 (Heater): OFF")
 
-def compressor_ac_on():
+def compressor_acu_on():
     subprocess.call("Outlet3On.sh")
     print("Outlet 3: ON")
+    logger.log_csv_input("Outlet 3 (ACU): ON")
 
-def compressor_ac_off():
+def compressor_acu_off():
     subprocess.call("Outlet3Off.sh")
-    print("Outlet 3: OFF")
+    print("Outlet 3 (ACU): OFF")
+    logger.log_csv_input("Outlet 3 (ACU): OFF")
 
 def start():
     running = 1
     pump_on()
     heater_on()
-    compressor_ac_on()
+    compressor_acu_on()
     
 def stop():
     running = 0
     heater_off()
-    compressor_ac_off()    
+    compressor_acu_off()    
     
 def pump():
     pump_on()
     heater_off()
-    compressor_ac_off()
+    compressor_acu_off()
 
 def updateText():
     if temp < 65:
@@ -187,9 +193,9 @@ class Logger:
     def __init__(self):
         tstamp = datetime.datetime.now().strftime('%c')
         log = open('log.csv','a+')
-        log.write(f'\n\n{tstamp}\n')
+        log.write(f'\n\n\n{tstamp}\n')
 
-    def update(self, valve):
+    def update(self):
         self.print_status()
         self.log_csv()
 
@@ -199,13 +205,17 @@ class Logger:
     def log_csv(self):
         log = open('log.csv','a+')
         log.write(f'Time: {stamps[len(stamps)-1]}    Temp: {temps[len(temps)-1]:.2f}°C    Valve Pos: {valve_position}% \n')
+    
+    def log_csv_input(self, text):
+        log = open('log.csv','a+')
+        log.write(f'{text} \n')
 
 try:
     # Global variables
     temp = 0 # I refuse to explain this variable's use
     valve_position = 0 # The position of the valve 0: Closed - 100: Open
     count = 0 # Counts the number of temperatures stored
-    running = -1 # -1: Not started, 0: Off, 1: On
+    running = -1 # -1: Stopped, 0: Stopping, 1: Running
     temps = [] # Stores temperature's to display on screen
     counts = [] # Stores temperature's ID for logging
     stamps = [] # Stores temperature's timestamp for logging
@@ -245,7 +255,7 @@ try:
     lbl_temp.pack(side=tk.BOTTOM)        
 
     # Animate the Matplotlib graph
-    ani = animation.FuncAnimation(fig, animate, interval=2500)
+    ani = animation.FuncAnimation(fig, animate, interval=1000)
     startTime = time.time()
 
     # Main loop
@@ -265,7 +275,7 @@ try:
                     temps.pop(0)
             count += 1
             updateText()
-            logger.update(valve)
+            logger.update()
         controller.update()
 
 except KeyboardInterrupt:
